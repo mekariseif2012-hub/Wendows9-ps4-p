@@ -1,0 +1,36 @@
+name: Build PS4 PKG
+on: [workflow_dispatch]
+env:
+  DOTNET_ROLL_FORWARD: Major
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang lld unzip
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+      - name: Download OpenOrbis release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R OpenOrbis/OpenOrbis-PS4-Toolchain --pattern '*.tar.gz' --dir dl
+          ls -la dl
+          mkdir oo
+          for t in dl/*.tar.gz; do tar -xzf "$t" -C oo; done
+          find oo -maxdepth 3 | head -n 40
+          BIN=$(find oo -type d -path '*/bin/linux' | head -n1)
+          ROOT=$(realpath "$(dirname "$(dirname "$BIN")")")
+          chmod -R +x "$BIN"
+          echo "OO_PS4_TOOLCHAIN=$ROOT" >> "$GITHUB_ENV"
+      - name: Build hello_world sample
+        run: |
+          cp -r "$OO_PS4_TOOLCHAIN/samples/hello_world" sample
+          cd sample && make
+          find . -type f | head -n 50
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ps4-pkg
+          path: sample/**/*.pkg
+          if-no-files-found: error
